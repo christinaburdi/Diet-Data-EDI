@@ -409,7 +409,8 @@ lcheck = lengths
 
 #want to make sure our station list has coordinates for all listed stations
 
-stations = read_xlsx ("Data for R/Delta Smelt Diet Station Lookup_NKU07Apr2026_v2.xlsx")
+stations = read_xlsx ("Data for R/Delta Smelt Diet Station Lookup_NKU07Apr2026_v2.xlsx") %>% 
+  mutate(ProjectStation = paste(Project, Station, sep = "_")) #add a combo of the project station so we can filter based on if its in the list
 
 stationcheck = numball %>% 
   group_by(Project, Station) %>% 
@@ -428,8 +429,16 @@ stationerror = stationcheck %>%
 
 #make sure no orphan stations
 
-stationerror2 = stationcheck %>% 
-  
+orphanst = numball %>% 
+  mutate(ProjectStation = paste(Project, Station, sep = "_")) %>% 
+  group_by(ProjectStation) %>% 
+  summarise(n = n()) %>% 
+  select(-n)
+
+stationerror2 = orphanst %>% 
+  left_join(., stations, by= 'ProjectStation') %>% 
+  filter(is.na(ProjectStation))
+#all good  
 
 
 
