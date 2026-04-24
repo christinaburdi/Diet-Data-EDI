@@ -39,10 +39,10 @@ dop = read_xlsx("Data for R/DOP/DOP EDI Qry Diet by Number.xlsx")%>% #adding in 
 
 #need to add in presence-absence columns separately I guess
 
-dop_pa = read.csv("Data for R/DOP/DOP EDI Qry_Presence Absence Categories to Post.csv", check.names = FALSE) %>% 
-  mutate(Time = as_hms(mdy_hms(Time, tz="America/Los_Angeles"))) %>% 
-  mutate(Date2 = mdy_hms(Date)) %>% #need to convert to date, but also has the time in there which is why use _hm
-  mutate(Date = date(Date2),
+dop_pa = read_xlsx("Data for R/DOP/DOP EDI Qry_Presence_Absence Categories to Post.xlsx") %>% 
+  mutate(Time = as_hms(ymd_hms(Time, tz="America/Los_Angeles"))) %>% 
+  # mutate(Date2 = mdy_hms(Date)) %>% #need to convert to date, but also has the time in there which is why use _hm
+  mutate(Date = date(Date),
          DietStudy = "DOP", 
          Year = as.numeric(Year), 
          Month = as.numeric(Month)) %>% 
@@ -56,12 +56,11 @@ dop_pa = read.csv("Data for R/DOP/DOP EDI Qry_Presence Absence Categories to Pos
 dopall = dop %>% 
   left_join(., dop_pa, by = c('DietStudy', 'LogNumber', 'Year', 'Month', 'Date', 'Station', 'SerialNumber', 'Time')) %>% 
   mutate(LogNumber = as.character(str_pad(LogNumber, width = 4, side = "left", pad = "0")) )%>% #add preceding zeros to the log numbers. also need to make it a character since flash has it that way
-  mutate(Debris = if_else(is.na(Debris), "N", "Y"), #change it to yes/no
-         `Stomach tissue` = if_else(is.na(`Stomach tissue`), "N", "Y"), 
-         `Unid animal material`= if_else(is.na(`Unid animal material`), "N", "Y"), 
-         `Unid plant material` = if_else(is.na(`Unid plant material`), "N", "Y")) %>% 
   mutate(UniqueID = paste(DietStudy, LogNumber, Project, Date, Station, SerialNumber, sep = " ")) %>%  #make a unique ID
-  select(UniqueID, DietStudy, LogNumber, Project:SerialNumber, CulturedOrigin, Depth:DigestionRank, Debris: `Unid plant material`, `Acanthocyclops spp`: `Unid mysids` )
+  mutate(SurfacePPT = as.numeric(SurfacePPT), 
+         BottomPPT = as.numeric(BottomPPT)) %>% 
+  rename(CultureOrigin = CulturedOrigin) %>% 
+  select(UniqueID, DietStudy, LogNumber, Project:SerialNumber, CultureOrigin, Depth:DigestionRank, Debris: `Unid plant material`, `Acanthocyclops spp`: `Unid mysids` )
 
 #numbers look good, but just checking to make sure there's no duplicates
 
@@ -121,8 +120,6 @@ flashpa = read_xlsx("Data for R/FLaSH/FLaSH EDI Qry_Presence_Absence Categories.
 flash3= flash2 %>% 
   left_join(., flashpa, by = c('DietStudy', 'LogNumber', 'Year', 'Month', 'Date', 'Station', 'SerialNumber', 'Time')) %>% 
   mutate(LogNumber = str_pad(LogNumber, width = 4, side = "left", pad = "0")) #add preceding zeros to the log numbers
-
-  select(DietStudy, LogNumber, Project:Date, Time,Station, SerialNumber, CulturedOrigin, Depth:DigestionRank, Debris: `Worm pieces`, `Acanthocyclops spp`: `Other malacostraca`) %>% 
 
 
 #check for duplicates----- all ges
@@ -230,43 +227,41 @@ missfsamps2 = flash4 %>%
 
 flashall = flash4 %>% 
   full_join(., misspa) %>% 
-  mutate(Debris = if_else(is.na(Debris), "N", "Y"), #change it to yes/no
-         `Stomach tissue` = if_else(is.na(`Stomach tissue`), "N", "Y"), 
-         `Unid animal material`= if_else(is.na(`Unid animal material`), "N", "Y"), 
-         `Unid plant material` = if_else(is.na(`Unid plant material`), "N", "Y"),
-         `Worm pieces` = if_else(is.na(`Worm pieces`), "N", "Y"))%>% 
-  mutate(UniqueID = paste(DietStudy, LogNumber, Project, Date, Station, SerialNumber, sep = " "))
+  mutate(UniqueID = paste(DietStudy, LogNumber, Project, Date, Station, SerialNumber, sep = " ")) %>% 
+  rename(CultureOrigin = CulturedOrigin)
   
 #check for duplicates again. 
 
 flashdups = flashall %>% 
-  group_by(LogNumber, SerialNumber, Project, Station, Date) %>% 
+  group_by(LogNumber, SerialNumber, Project, Station, Date) %>%
   summarise(n = n()) %>%
   filter(n>1)
 
 #wooooooooo no duplicates
 
 
-
-
 ##All Combined----
 
 #add all together and create a unique ID
 
-numball = bind_rows(flashall, dopall) %>% 
+numball = bind_rows(flashall, dopall) %>%
+  select (UniqueID, DietStudy, LogNumber, Project, GearType, Year, Month, Date, Time, Station, SerialNumber, CultureOrigin, Depth, SurfaceTemperature, SurfaceConductivity, SurfacePPT, BottomTemperature, BottomConductivity, BottomPPT, Secchi,	Turbidity, TotalBodyWeight, Length, GutContents, TotalGutContentWeight, TotalNumberOfPrey, TotalPreyWeight, GutFullness, FullnessRank, DigestionRank, Debris, `Unid animal material`,	`Unid plant material`, `Stomach tissue`, `Worm pieces`, `Acanthocyclops spp`, `Acartia copepodid`,  `Acartia spp`,  `Acartiella copepodid`, `Acartiella sinensis`, `Barnacle nauplii`,  `Bosmina spp`, `Calanoid copepodid`, `Ceriodaphnia spp`,  `Chironomid larvae`, Clams, `Copepod nauplii`, `Corophium type`, `Crab zoea`, Cumaceans, `Cyclopoid copepodid`, `Daphnia spp`, `Diaphanosoma spp`, `Diaptomus copepodid`, `Diaptomus spp`, `Eurytemora copepodid`, `Eurytemora nauplii`, `Eurytemora spp`, `Fish eggs`, `Gammarus type`, Harpacticoids, `Hyperacanthomysis longirostris`,  Isopods, `Limnoithona copepodid`, `Limnoithona spp`, `Longfin Smelt`, `Neomysis kadiakensis`, `Neomysis mercedis`, `Nippoleucon hinumensis`, `Oithona copepodid`, `Oithona davisae`, `Osphranticum`, `Ostracods`, `Other calanoid`, `Other cladocera`, `Other cyclopoid`, `Other insect larvae`, `Other malacostraca`, `Other rotifer`, `Other zooplankton`, `Pacific Herring`, Palaemon, `Prickly Sculpin`, `Pseudodiaptomus copepodid`, `Pseudodiaptomus forbesi`, `Pseudodiaptomus marinus`, `Pseudodiaptomus nauplii`, `Pseudodiaptomus spp`, `Sinocalanus copepodid`, `Sinocalanus nauplii`, `Sinocalanus spp`, Synchaeta, `Terrestrial invertebrates`, `Tortanus copepodid`, `Tortanus dextrilobatus`, `Tortanus spp`, `Tridentiger spp`, `Unid amphipod`, `Unid calanoid`, `Unid cladocera`, `Unid copepod`, `Unid cyclopoid`, `Unid fish`, `Unid mysids`) %>% #listing the exact way that it's in the metadata doc so I don't have to keep changing this based on how the different df pop out and adding it first so formating code can happen
   mutate_at(vars('Acanthocyclops spp' :`Unid mysids` ), ~replace(., is.na(.), 0)) %>%  #need to replace the NAs with 0s in some of the prey columns that are in one df but not the other
-  mutate(CulturedOrigin = case_when(CulturedOrigin %in% c("n", "No") ~ "U",
-                                    CulturedOrigin %in% c( "y", "Yes", "AdClipped", "VIE", "Y")~ "M",
+  mutate(CultureOrigin = case_when(CultureOrigin %in% c("n", "No") ~ "U",
+                                    CultureOrigin %in% c( "y", "Yes", "AdClipped", "VIE", "Y")~ "M",
                                     Date < "2021-12-15" ~"NA", #first release date
-                                    .default = CulturedOrigin)) %>% #making it so all cultured column is either marked, unmarked or NA for pre supplementation
+                                    .default = CultureOrigin)) %>% #making it so all cultured column is either marked, unmarked or NA for pre supplementation
   mutate(GutContents = case_when(GutContents %in% c("n", "No") ~ "N",
                                  GutContents %in% c( "y", "Yes")~ "Y",
                                   .default = GutContents)) %>% #consistent capitalized Y N
   mutate(GutFullness = case_when(TotalNumberOfPrey == 0 ~ 0, 
                                  .default = GutFullness)) %>% 
-# make sure if empty then GF is 0, not NA 
-  select(UniqueID, DietStudy, LogNumber:Date, Time, Station, TotalBodyWeight, Length, GutContents, TotalGutContentWeight:Debris, `Stomach tissue`, `Unid animal material`, `Unid plant material`, `Worm pieces`, `Acanthocyclops spp`: `Daphnia spp`, `Diacyclops spp`, `Diaphanosoma spp`: `Diaptomus copepodid`, `Eucyclops spp`, `Eurytemora spp`: `Neomysis mercedis`, `Nippoleucon hinumensis`, `Oithona davisae` : `Other insect larvae`, `Other malacostraca`, `Other rotifer`, `Other zooplankton`: `Unid copepod`, `Unid cumacean`, `Unid cyclopoid`: `Unid mysids`) %>% 
-  filter(Year <2024)#Only up to 2023 has been fully QC'd
+  mutate(Debris = if_else(is.na(Debris), "N", "Y"), #change it to yes/no
+         `Stomach tissue` = if_else(is.na(`Stomach tissue`), "N", "Y"), 
+         `Unid animal material`= if_else(is.na(`Unid animal material`), "N", "Y"), 
+         `Unid plant material` = if_else(is.na(`Unid plant material`), "N", "Y"),
+         `Worm pieces` = if_else(is.na(`Worm pieces`), "N", "Y")) %>% 
+  filter(Year<2024)#Only up to 2023 has been fully QC'd
 
 #for some reason the log numbers don't retain the preceeding zeros
 
@@ -293,14 +288,13 @@ zerosum = numball %>%
 zeroprey = numball %>% 
   mutate(totprey = rowSums(across(c(`Acanthocyclops spp`: `Unid mysids`)))) %>% 
   filter(GutContents == "Y") %>% 
-  filter(totprey ==0) %>% 
-  filter(LogNumber == "0688")
+  filter(totprey ==0)
 
 #make csv of GC Y and have prey
 
 write.csv(zeroprey, "Outputs/Error Checks/zeroprey.csv", row.names = FALSE)
 
-#check that there are coordinates. dates, etc
+#all are fish with presence absence cats only so ok
 
 #Gut fullness = 0, if sum of prey = 0
 
@@ -379,7 +373,7 @@ f_alllengths = flash_lengths %>%
 
 #combine all lengths
 lengths = rbind(dop_lengths, f_alllengths) %>% 
-  filter(UniqueID %in% all$UniqueID) %>%  #only keep lengths for specimens that are in the main file
+  filter(UniqueID %in% numball$UniqueID) %>%  #only keep lengths for specimens that are in the main file
   mutate(PreyLengthSpecies = case_when(PreyLengthSpecies == "juvenile Gammarus" ~ NA, 
                                        PreyLengthSpecies == "juvenile Corophium" ~ NA, 
                                        PreyLengthSpecies == "Unid juvenile" ~ NA, 
@@ -399,16 +393,13 @@ write.csv(lengths, file = "Outputs/Delta Smelt Prey Lengths.csv", row.names = FA
 
 ##Error Checks----
 
-#this length file has some NA lengths but eye diameters. need to check the original data to confirm
-#make csv for checking
+#missing lengths
 
 misslengths = lengths %>% 
   filter(is.na(PreyLength)) %>% 
   filter(!is.na(EyeDiameter))
 
-#write csv of eye diameters only
-
-write.csv(misslengths, file = "missinglengths.csv", row.names = FALSE)
+#all good
 
 #check that all critters that require lengths, have them
 
@@ -420,16 +411,25 @@ lcheck = lengths
 
 stations = read_xlsx ("Data for R/Delta Smelt Diet Station Lookup_NKU07Apr2026_v2.xlsx")
 
-stationcheck = all %>% 
+stationcheck = numball %>% 
   group_by(Project, Station) %>% 
   summarise(n = n()) %>% 
   merge(., stations) %>% 
   select(-n)
 
+##Error Checks-------
+
+#check for missing coords
+
 stationerror = stationcheck %>% 
   filter(is.na(Longitude))
 
 #no missing coords. nice
+
+#make sure no orphan stations
+
+stationerror2 = stationcheck %>% 
+  
 
 
 
