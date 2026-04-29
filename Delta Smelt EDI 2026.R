@@ -245,7 +245,10 @@ missfsamps2 = flash4 %>%
 flashall = flash4 %>% 
   full_join(., misspa) %>% 
   mutate(UniqueID = paste(DietStudy, LogNumber, Project, Date, Station, SerialNumber, sep = " ")) %>% 
-  rename(CultureOrigin = CulturedOrigin)
+  rename(CultureOrigin = CulturedOrigin) %>% 
+  mutate("Other malacostraca2" = (`Unid larval shrimp` + `Other malacostraca`)) %>% #combining unid larval shrimp and other malac for now, will need to get weights for it 
+  select(-c(`Unid larval shrimp`,`Other malacostraca`)) %>% #remove old categories
+  rename("Other malacostraca" = 'Other malacostraca2')
   
 #check for duplicates again. 
 
