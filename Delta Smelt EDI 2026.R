@@ -69,6 +69,22 @@ dopdups = dop %>%
   summarise(n = n()) %>%
   filter(n>1)
 
+##Sample Check----
+
+#verify all dop samples are included that should be
+#pull out sample ID query
+
+dsamples = read.csv("Data for R/DOP/DOP EDI Qry_Sample Check.csv") %>% 
+  mutate(LogNumber = str_pad(DOPLogNumber, width = 4, side = "left", pad = "0")) %>% 
+  select(-DOPLogNumber) %>% 
+  filter(Year <2024)
+
+#whats missing in the dop all file
+missdsamps = dsamples %>% 
+  filter(!LogNumber %in% dopall$LogNumber ) #all these missing here have blank gut contents, aka errors in the processing so all good
+
+
+
 #######Flash Data--------
 
 #ran edi by number query in the database. this results in duplicates for ges samples which I'll need to remove down below
@@ -186,12 +202,12 @@ flash4 = flash_noges %>%
 
 #do sample list query in flash
 
-samples = read.csv("Data for R/FLaSH/FLaSH EDI Qry_Sample List.csv") %>% 
+fsamples = read.csv("Data for R/FLaSH/FLaSH EDI Qry_Sample List.csv") %>% 
   mutate(LogNumber = str_pad(FLaSHLogNumber, width = 4, side = "left", pad = "0")) %>% 
   select(-FLaSHLogNumber) 
 
 #whats missing in the flash all file
-missfsamps = samples %>% 
+missfsamps = fsamples %>% 
   filter(!LogNumber %in% flash4$LogNumber )
 
 #missing 8 samples which are all samples that just have pa prey
@@ -209,6 +225,7 @@ misspa = read_xlsx("Data for R/FLaSH/FLaSH EDI Qry_Presence_Absence Categories.x
          Debris = `Debris (sand/silt/mud)`,
          "Stomach tissue" = `Stomach/Gut Tissue`) %>% 
   mutate(LogNumber = str_pad(LogNumber, width = 4, side = "left", pad = "0")) %>% 
+  mutate(GutFullness = 0) %>% #add a gutfullness column of 0
   filter(!LogNumber %in% flash4$LogNumber)  %>% 
   mutate(BottomTemperature = as.numeric(BottomTemperature), 
          BottomPPT = as.numeric(BottomPPT)) %>% 
@@ -216,7 +233,7 @@ misspa = read_xlsx("Data for R/FLaSH/FLaSH EDI Qry_Presence_Absence Categories.x
 
 
 missfsamps2 = flash4 %>% 
-  filter(!LogNumber %in% samples$LogNumber )
+  filter(!LogNumber %in% fsamples$LogNumber )
 
 #no samples that are in the flash all file that are in samples
 
@@ -261,11 +278,27 @@ numball = bind_rows(flashall, dopall) %>%
          `Unid animal material`= if_else(is.na(`Unid animal material`), "N", "Y"), 
          `Unid plant material` = if_else(is.na(`Unid plant material`), "N", "Y"),
          `Worm pieces` = if_else(is.na(`Worm pieces`), "N", "Y")) %>% 
+  mutate(TotalNumberOfPrey = if_else(is.na(TotalNumberOfPrey), 0, TotalNumberOfPrey)) %>%  #make it so that fishes with presence/absence prey only are total 0 prey instead of na%>% 
   filter(Year<2024)#Only up to 2023 has been fully QC'd
 
 #for some reason the log numbers don't retain the preceeding zeros
+#want to format decimal places
 
-write.csv(numball, "Outputs/Delta Smelt Diet Data 2011to2023.csv", row.names = FALSE)
+numball_format = numball %>% 
+  mutate(Depth = round(Depth, digits = 1), 
+         SurfaceTemperature = round(SurfaceTemperature, digits = 1),
+         SurfaceConductivity = round(SurfaceConductivity, digits = 0),
+         SurfacePPT = round(SurfacePPT, digits = 2), 
+         BottomTemperature = round(BottomTemperature, digits = 1), 
+         BottomConductivity = round(BottomConductivity, digits = 0),
+         BottomPPT= round(BottomPPT, digits = 2), 
+         Turbidity = round(Turbidity, digits = 1), 
+         TotalBodyWeight = round(TotalBodyWeight, digits = 5), 
+         TotalGutContentWeight = round(TotalGutContentWeight, digits = 5), 
+         TotalPreyWeight = round(TotalGutContentWeight, digits = 5), 
+         GutFullness = round(GutFullness, digits = 5))
+
+write.csv(numball_format, "Outputs/Delta Smelt Diet Data 2011to2023.csv", row.names = FALSE)
 
 ##Error Checks-----
 
@@ -273,12 +306,12 @@ write.csv(numball, "Outputs/Delta Smelt Diet Data 2011to2023.csv", row.names = F
 
 #check that if GC = N, the there is no prey
 
-emptycheck = numball %>% 
+emptycheck = numball_format %>% 
   filter(GutContents == "N" & TotalNumberOfPrey != 0)
 
 #check that all the prey columns add up to zero, if GC = N
 
-zerosum = numball %>% 
+zerosum = numball_format %>% 
   mutate(totprey = rowSums(across(c(`Acanthocyclops spp`: `Unid mysids`)))) %>% 
   filter(GutContents == "N") %>% 
   filter(totprey !=0)
@@ -306,7 +339,7 @@ guterror = numball %>%
 gutna = numball %>% 
   filter(is.na (GutFullness)) #12 records that need to verify. make csv to do so
 
-write.csv(gutna, "gutcheck.csv")
+write.csv(gutna, "Outputs/Error Checks/gutcheck.csv", row.names = FALSE)
  #all of these have no body weight so gf can't be calculated
 #or there's non quantifiable prey
 
@@ -362,7 +395,7 @@ flashantenn = read.csv("Data for R/FLaSH/FLaSH Qry_EDI Antennae Lengths.csv", ch
 
 #check if there are antennae lengths not in the length file
 
-lengthcheck = flashantenn %>% 
+alcheck = flashantenn %>% 
   filter(!UniqueID %in% flash_lengths$UniqueID) #no antenntae lengths not in the length file. Perfect
 
 #combine flash lengths and antennae lengths
@@ -402,14 +435,47 @@ misslengths = lengths %>%
 #all good
 
 #check that all critters that require lengths, have them
+#read in a csv that has the routinely measured critters
 
-lcheck = lengths
+lengthgroup = read.csv("Data for R/Prey Definitions and Conversions.csv") %>% 
+  filter(RoutinelyMeasured == "Y") %>% 
+  select(PreyCategory, RoutinelyMeasured)
 
-#Station List------
+#group together number of lengths for critters that need them so can check with prey totals for these categories
+
+lengthtotals = lengths %>% 
+  merge(., lengthgroup, by = 'PreyCategory') %>% 
+  filter(RoutinelyMeasured == "Y") %>% 
+  group_by(UniqueID, PreyCategory) %>% 
+  summarise(numblengths = length(PreyCategory))
+
+#find the prey category totals for those that require lengths
+#first pivot longer so can total just lengthed prey and how many prey each sample has that need lengths
+
+ltotsnumb= numball %>% 
+  select(UniqueID, `Acanthocyclops spp`:`Unid mysids`) %>% 
+  pivot_longer(cols = `Acanthocyclops spp`:`Unid mysids`, 
+               names_to = "PreyCategory", 
+               values_to = "PreyNumber") %>% 
+  merge(., lengthgroup, by = 'PreyCategory') %>% 
+  filter(RoutinelyMeasured == "Y") %>% 
+  filter(PreyNumber != 0) %>% 
+  group_by(UniqueID, PreyCategory) %>% 
+  summarise(nlengthgroup = sum(PreyNumber))
+
+#compare the 2 files to make sure I have lengths for the prey that need them
+
+ltotscheck = ltotsnumb %>% 
+  merge(., lengthtotals, by = c('UniqueID', 'PreyCategory')) %>% 
+  mutate(LengthCheck = if_else(numblengths == nlengthgroup, "Y", "N")) %>% #add a column to see if the two column numbers match
+  filter(LengthCheck == "N")#check those that don't match
+  
+
+#Station List------#Stcount()ation List------
 
 #want to make sure our station list has coordinates for all listed stations
 
-stations = read_xlsx ("Data for R/Delta Smelt Diet Station Lookup_NKU07Apr2026_v2.xlsx") %>% 
+stations = read.csv("Data for R/Delta Smelt Diet Station Lookup.csv") %>% 
   mutate(ProjectStation = paste(Project, Station, sep = "_")) #add a combo of the project station so we can filter based on if its in the list
 
 stationcheck = numball %>% 
