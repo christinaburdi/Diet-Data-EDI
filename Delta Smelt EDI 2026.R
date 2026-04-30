@@ -81,7 +81,7 @@ dsamples = read.csv("Data for R/DOP/DOP EDI Qry_Sample Check.csv") %>%
 
 #whats missing in the dop all file
 missdsamps = dsamples %>% 
-  filter(!LogNumber %in% dopall$LogNumber ) #all these missing here have blank gut contents, aka errors in the processing so all good
+  filter(!LogNumber %in% dopall$LogNumber ) #10 missining but all here have blank gut contents, aka errors in the processing so all good
 
 
 
@@ -284,7 +284,7 @@ numball = bind_rows(flashall, dopall) %>%
   mutate(TotalNumberOfPrey = if_else(is.na(TotalNumberOfPrey), 0, TotalNumberOfPrey)) %>%  #make it so that fishes with presence/absence prey only are total 0 prey instead of na%>% 
   filter(Year<2024)#Only up to 2023 has been fully QC'd
 
-#for some reason the log numbers don't retain the preceeding zeros
+#log numbers retain the preceeding zeros when opened as a text file or in R, excel removes them so if open there it looks like they've disappeared
 #want to format decimal places
 
 numball_format = numball %>% 
@@ -388,7 +388,7 @@ dop_lengths = read.csv("Data for R/DOP/DOP EDI Qry_Prey Lengths to Post.csv", ch
 
 #there are some lengths in here that are NA. Especially for Cumaceans. Need to verify
 
-flash_lengths = read.csv("Data for R/FLaSH/FLaSH Qry_EDI Prey Lengths.csv", check.names = FALSE) %>% 
+flashlengths = read.csv("Data for R/FLaSH/FLaSH Qry_EDI Prey Lengths.csv", check.names = FALSE) %>% 
   mutate(DietStudy = "FLaSH",   #adding a database column
          Date2 = mdy_hms(Date),  #need to do the same thing with the dates like i did the diet by number files
          Date = date(Date2)) %>%  #now move it to just the date, no time 
@@ -397,7 +397,7 @@ flash_lengths = read.csv("Data for R/FLaSH/FLaSH Qry_EDI Prey Lengths.csv", chec
   mutate(LogNumber = str_pad(LogNumber, width = 4, side = "left", pad = "0")) %>% #add preceding zeros to the log numbers
   mutate(UniqueID = paste(DietStudy, LogNumber, Project, Date,
                           Station, SerialNumber, sep = " ")) %>% 
-  select(UniqueID, DietStudy, LogNumber, Project, Station, Date, SerialNumber, PreyCategory, PreyLength, LengthEstimate, PreyWeight, EyeDiameter, Comments )
+  select(UniqueID, DietStudy, LogNumber, Project, Station, Date, Time, SerialNumber, PreyCategory, PreyLengthID, PreyLength, LengthEstimate, PreyWeight, EyeDiameter, Comments )
 
 #need to add anntennae lengths to the flash file
 #some of these have an NA length. need to check again with new database
@@ -411,17 +411,48 @@ flashantenn = read.csv("Data for R/FLaSH/FLaSH Qry_EDI Antennae Lengths.csv", ch
   mutate(LogNumber = str_pad(LogNumber, width = 4, side = "left", pad = "0")) %>% #add preceding zeros to the log numbers
   mutate(UniqueID = paste(DietStudy, LogNumber, Project, Date,
                           Station, SerialNumber, sep = " ")) %>% 
-  select(UniqueID, DietStudy, LogNumber, Project, Station, Date, SerialNumber, PreyCategory, PreyLength, PreyLengthSpecies, PreyAntennaLength, PreySex)
+  select(UniqueID, DietStudy, LogNumber, Project, Station, Date, Time, SerialNumber, PreyCategory, PreyLengthID, PreyLength, PreyLengthSpecies, PreyAntennaLength, PreySex)
 
 #check if there are antennae lengths not in the length file
 
 alcheck = flashantenn %>% 
-  filter(!UniqueID %in% flash_lengths$UniqueID) #no antenntae lengths not in the length file. Perfect
+  filter(!UniqueID %in% flashlengths$UniqueID) #no antenntae lengths not in the length file. Perfect
 
 #combine flash lengths and antennae lengths
 
-f_alllengths = flash_lengths %>% 
-  left_join(., flashantenn, by = c('UniqueID', 'DietStudy', 'LogNumber', 'Project', 'Station', 'Date', 'SerialNumber', 'PreyCategory', 'PreyLength'))
+flashlengths2 = flashlengths %>% 
+  left_join(., flashantenn, by = c('UniqueID', 'DietStudy', 'LogNumber', 'Project', 'Station', 'Date', 'Time', 'SerialNumber', 'PreyCategory', 'PreyLength', 'PreyLengthID'))
+
+#check for duplicates in flash lengths. 
+
+flengthdups = flashlengths2 %>% 
+  group_by(UniqueID, DietStudy, LogNumber, PreyLengthID, PreyCategory) %>% 
+  summarise(n=n()) %>% 
+  filter(n>1)
+
+#most of these are ges so need to filter out the right times
+
+###GES Lengths-----
+
+#do like what I did before with ges
+#make two dataframes, one with ges and one without, filter out the right date/time for ges, then combine again
+
+nogeslengths = flashlengths2 %>% 
+  filter(Project != "GES")
+
+#filter out ges duplicates based on earlier file with correct ges sample dates and stations
+
+geslengths = flashlengths2 %>% 
+  filter(Project == "GES") %>% 
+  mutate(Time = as_hms(mdy_hms(Time, tz="America/Los_Angeles")), 
+         Station = as.character(Station)) %>% 
+  right_join(., gescheck, by= c("LogNumber", "Project", "Date", "Time", "Station"))
+  
+
+#combine all flash lengths
+f_alllengths = nogeslengths %>% 
+  rbind(geslengths) %>% 
+  select(-c(Time, PreyLengthID))
 
 
 #combine all lengths
@@ -454,7 +485,8 @@ misslengths = lengths %>%
 
 #all good
 
-#check that all critters that require lengths, have them
+#All critters that require lengths, have them
+
 #read in a csv that has the routinely measured critters
 
 lengthgroup = read.csv("Data for R/Prey Definitions and Conversions.csv") %>% 
@@ -491,7 +523,7 @@ ltotscheck = ltotsnumb %>%
   filter(LengthCheck == "N")#check those that don't match
   
 
-#Station List------#Stcount()ation List------
+#Station List------#Station List------
 
 #want to make sure our station list has coordinates for all listed stations
 
