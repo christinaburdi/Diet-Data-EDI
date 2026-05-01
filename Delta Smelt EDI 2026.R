@@ -468,7 +468,8 @@ lengths = rbind(dop_lengths, f_alllengths) %>%
                                        PreyLengthSpecies == "Gammarus spp." ~ "Gammarus spp", 
                                        
                                        .default = PreyLengthSpecies)) %>% #change it so we remove the juvenile category and the others match
-  # mutate(RoutinelyMeasured = if_else(PreyCategory %in% c("Hyperacanthomysis longirostris", "Unid mysids", "Corophium type", "Gammarus type", "Unid amphipod", "Chironomid larvae", "Isopods", "Terrestrial invertebrates", "Palaemon", "Pacific Herring", "Unid fish", "Prickly Sculpin", "Neomysis mercedis", "Longfin Smelt", "Tridentiger spp", "Neomysis kadiakensis"), "Y", "N")) %>% #adding a column for whether the prey is regularly measured or its just a one off
+  mutate(PreySex = if_else(PreySex == "", NA, PreySex), 
+         LengthEstimate = if_else(LengthEstimate == "", NA, LengthEstimate)) %>% #add in na instead of blanks
   filter(!PreyCategory %in% c("Unid plant material", "Unid animal material", "Annelid worms", "Other zooplankton", "Ostracods", "Crab zoea"))   #removed some of the presence/absence categories and ones with just one or two lengths
   #would normally remove NA lengths but keeping them so people know that it wasn't missed
 
@@ -551,9 +552,7 @@ orphanst = numball %>%
   mutate(ProjectStation = paste(Project, Station, sep = "_")) %>% 
   group_by(ProjectStation) %>% 
   summarise(n = n()) %>% 
-  select(-n)
-
-stationerror2 = orphanst %>% 
+  select(-n) %>% 
   left_join(., stations, by= 'ProjectStation') %>% 
   filter(is.na(ProjectStation))
 #all good  
