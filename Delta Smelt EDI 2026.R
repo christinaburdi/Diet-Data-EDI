@@ -81,9 +81,10 @@ dsamples = read.csv("Data for R/DOP/DOP EDI Qry_Sample Check.csv") %>%
 
 #whats missing in the dop all file
 missdsamps = dsamples %>% 
-  filter(!LogNumber %in% dopall$LogNumber ) #10 missining but all here have blank gut contents, aka errors in the processing so all good
+  filter(!LogNumber %in% dopall$LogNumber ) #11 missining but all here have blank gut contents, aka errors in the processing so all good
 
-
+#make csv
+write.csv(missdsamps, "Outputs/Error Checks/doperrorsamples.csv")
 
 #######Flash Data--------
 
@@ -268,7 +269,7 @@ numball = bind_rows(flashall, dopall) %>%
   select (UniqueID, DietStudy, LogNumber, Project, GearType, Year, Month, Date, Time, Station, SerialNumber, CultureOrigin, Depth, SurfaceTemperature, SurfaceConductivity, SurfacePPT, BottomTemperature, BottomConductivity, BottomPPT, Secchi,	Turbidity, TotalBodyWeight, Length, GutContents, TotalGutContentWeight, TotalNumberOfPrey, TotalPreyWeight, GutFullness, FullnessRank, DigestionRank, Debris, `Unid animal material`,	`Unid plant material`, `Stomach tissue`, `Worm pieces`, `Acanthocyclops spp`, `Acartia copepodid`,  `Acartia spp`,  `Acartiella copepodid`, `Acartiella sinensis`, `Barnacle nauplii`,  `Bosmina spp`, `Calanoid copepodid`, `Ceriodaphnia spp`,  `Chironomid larvae`, Clams, `Copepod nauplii`, `Corophium type`, `Crab zoea`, Cumaceans, `Cyclopoid copepodid`, `Daphnia spp`, `Diacyclops spp`, `Diaphanosoma spp`, `Diaptomus copepodid`, `Diaptomus spp`, `Eucyclops spp`, `Eurytemora copepodid`, `Eurytemora nauplii`, `Eurytemora spp`, `Fish eggs`, `Gammarus type`, Harpacticoids, `Hyperacanthomysis longirostris`,  Isopods, `Limnoithona copepodid`, `Limnoithona spp`, `Longfin Smelt`, `Neomysis kadiakensis`, `Neomysis mercedis`, `Nippoleucon hinumensis`, `Oithona copepodid`, `Oithona davisae`, `Osphranticum`, `Ostracods`, `Other calanoid`, `Other cladocera`, `Other cyclopoid`, `Other insect larvae`, `Other malacostraca`, `Other rotifer`, `Other zooplankton`, `Pacific Herring`, Palaemon, `Prickly Sculpin`, `Pseudodiaptomus copepodid`, `Pseudodiaptomus forbesi`, `Pseudodiaptomus marinus`, `Pseudodiaptomus nauplii`, `Pseudodiaptomus spp`, `Sinocalanus copepodid`, `Sinocalanus nauplii`, `Sinocalanus spp`, Synchaeta, `Terrestrial invertebrates`, `Tortanus copepodid`, `Tortanus dextrilobatus`, `Tortanus spp`, `Tridentiger spp`, `Unid amphipod`, `Unid calanoid`, `Unid cladocera`, `Unid copepod`, `Unid cumacean`, `Unid cyclopoid`, `Unid fish`, `Unid mysids`) %>% #listing the exact way that it's in the metadata doc so I don't have to keep changing this based on how the different df pop out and adding it first so formating code can happen
   mutate_at(vars('Acanthocyclops spp' :`Unid mysids` ), ~replace(., is.na(.), 0)) %>%  #need to replace the NAs with 0s in some of the prey columns that are in one df but not the other
   mutate(CultureOrigin = case_when(CultureOrigin %in% c("n", "No", "N") ~ "U",
-                                    CultureOrigin %in% c( "y", "Yes", "AdClipped", "VIE", "Y")~ "M",
+                                    CultureOrigin %in% c( "y", "Yes", "AdClipped", "VIE", "Y", "VIE-LGA", "VIE-LOA", "VIE-LRA", "VIE-RGP", "VIE-ROP", "VIE-RRM")~ "M",
                                     Date < "2021-12-15" ~NA, #first release date
                                     .default = CultureOrigin)) %>% #making it so all cultured column is either marked, unmarked or NA for pre supplementation
   mutate(GutContents = case_when(GutContents %in% c("n", "No") ~ "N",
@@ -333,7 +334,7 @@ totpreycheck = numball_format %>%
 
 #some of these records are doubling are 4x-ing prey numbers. think its because of duplicate enviro records so make a csv for nene to check the db
 
-write.csv(totpreycheck, "Outputs/Error Checks/ totpreymismatch.csv", row.names = FALSE)
+# write.csv(totpreycheck, "Outputs/Error Checks/ totpreymismatch.csv", row.names = FALSE)
   
 
 #check that all GC=Y have prey
