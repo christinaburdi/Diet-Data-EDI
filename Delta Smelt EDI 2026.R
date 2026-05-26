@@ -376,13 +376,14 @@ write.csv(gutna, "Outputs/Error Checks/gutcheck.csv", row.names = FALSE)
 dop_lengths = read.csv("Data for R/DOP/DOP EDI Qry_Prey Lengths to Post.csv", check.names = FALSE) %>% 
   mutate(DietStudy = "DOP",   #adding a database column
          Date2 = mdy_hms(Date),  #need to do the same thing with the dates like i did the diet by number files
-         Date = date(Date2)) %>%  #now move it to just the date, no time 
+         Date = date(Date2)) %>%  #now move it to just the date, no time
+  mutate(Time = as_hms(mdy_hms(Time, tz="America/Los_Angeles"))) %>% #convert time. need to have the mdy_hms in there because it wants it first as a date/time instead of a character
   rename(LogNumber = DOPLogNumber, 
          Comments = PreyLengthComments) %>% 
   mutate(LogNumber = str_pad(LogNumber, width = 4, side = "left", pad = "0")) %>% #add preceding zeros to the log numbers
   mutate(UniqueID = paste(DietStudy, LogNumber, Project, Date,
                           Station, SerialNumber, sep = " ")) %>% 
-  select(UniqueID, DietStudy, LogNumber, Project, Station, Date, SerialNumber, PreyCategory, PreyLengthSpecies, PreyLength, LengthEstimate, PreyWeight, EyeDiameter, PreyAntennaLength, PreySex, Comments ) 
+  select(UniqueID, DietStudy, LogNumber, Project, Station, Date, Time, SerialNumber, PreyCategory, PreyLengthSpecies, PreyLength, LengthEstimate, PreyWeight, EyeDiameter, PreyAntennaeLength, PreySex, Comments ) 
 
 
 ##Flash Lengths----
@@ -395,12 +396,13 @@ flashlengths = read.csv("Data for R/FLaSH/FLaSH Qry_EDI Prey Lengths.csv", check
          Date = date(Date2)) %>%  #now move it to just the date, no time 
   rename(LogNumber = FLaSHLogNumber, 
          Time = MinOfTowTime) %>% 
+  mutate(Time = as_hms(mdy_hms(Time, tz="America/Los_Angeles"))) %>% #convert time. need to have the mdy_hms in there because it wants it first as a date/time instead of a character
   mutate(LogNumber = str_pad(LogNumber, width = 4, side = "left", pad = "0")) %>% #add preceding zeros to the log numbers
   mutate(UniqueID = paste(DietStudy, LogNumber, Project, Date,
                           Station, SerialNumber, sep = " ")) %>% 
   select(UniqueID, DietStudy, LogNumber, Project, Station, Date, Time, SerialNumber, PreyCategory, PreyLengthID, PreyLength, LengthEstimate, PreyWeight, EyeDiameter, Comments )
 
-#need to add anntennae lengths to the flash file
+#need to add anntennae mdy_hms()#need to add anntennae lengths to the flash file
 #some of these have an NA length. need to check again with new database
 
 flashantenn = read.csv("Data for R/FLaSH/FLaSH Qry_EDI Antennae Lengths.csv", check.names = FALSE) %>% 
@@ -408,11 +410,12 @@ flashantenn = read.csv("Data for R/FLaSH/FLaSH Qry_EDI Antennae Lengths.csv", ch
          Date2 = mdy_hms(Date),  #need to do the same thing with the dates like i did the diet by number files
          Date = date(Date2)) %>%  #now move it to just the date, no time 
   rename(LogNumber = FLaSHLogNumber, 
-         Time = MinOfTowTime) %>% 
+         Time = MinOfTowTime) %>%
+  mutate(Time = as_hms(mdy_hms(Time, tz="America/Los_Angeles"))) %>% #convert time. need to have the mdy_hms in there because it wants it first as a date/time instead of a character
   mutate(LogNumber = str_pad(LogNumber, width = 4, side = "left", pad = "0")) %>% #add preceding zeros to the log numbers
   mutate(UniqueID = paste(DietStudy, LogNumber, Project, Date,
                           Station, SerialNumber, sep = " ")) %>% 
-  select(UniqueID, DietStudy, LogNumber, Project, Station, Date, Time, SerialNumber, PreyCategory, PreyLengthID, PreyLength, PreyLengthSpecies, PreyAntennaLength, PreySex)
+  select(UniqueID, DietStudy, LogNumber, Project, Station, Date, Time, SerialNumber, PreyCategory, PreyLengthID, PreyLength, PreyLengthSpecies, PreyAntennaeLength, PreySex)
 
 #check if there are antennae lengths not in the length file
 
@@ -445,16 +448,20 @@ nogeslengths = flashlengths2 %>%
 
 geslengths = flashlengths2 %>% 
   filter(Project == "GES") %>% 
-  mutate(Time = as_hms(mdy_hms(Time, tz="America/Los_Angeles")), 
-         Station = as.character(Station)) %>% 
+  mutate(Station = as.character(Station)) %>% 
   right_join(., gescheck, by= c("LogNumber", "Project", "Date", "Time", "Station"))
   
 
 #combine all flash lengths
 f_alllengths = nogeslengths %>% 
   rbind(geslengths) %>% 
-  select(-c(Time, PreyLengthID))
+  select(-PreyLengthID) %>%
+  
+  mutate("Other malacostraca2" = (`Unid larval shrimp` + `Other malacostraca`)) %>% #combining unid larval shrimp and other malac for now, will need to get weights for it 
+  select(-c(`Unid larval shrimp`,`Other malacostraca`)) %>% #remove old categories
+  rename("Other malacostraca" = 'Other malacostraca2')
 
+##All Length------
 
 #combine all lengths
 lengths = rbind(dop_lengths, f_alllengths) %>% 
@@ -471,6 +478,7 @@ lengths = rbind(dop_lengths, f_alllengths) %>%
                                        .default = PreyLengthSpecies)) %>% #change it so we remove the juvenile category and the others match
   mutate(PreySex = if_else(PreySex == "", NA, PreySex), 
          LengthEstimate = if_else(LengthEstimate == "", NA, LengthEstimate)) %>% #add in na instead of blanks
+  mutate(PreyCategory = if_else(PreyCategory == "Unid larval shrimp", "Other malacostraca", PreyCategory)) %>% 
   filter(!PreyCategory %in% c("Unid plant material", "Unid animal material", "Annelid worms", "Other zooplankton", "Ostracods", "Crab zoea"))   #removed some of the presence/absence categories and ones with just one or two lengths
   #would normally remove NA lengths but keeping them so people know that it wasn't missed
 

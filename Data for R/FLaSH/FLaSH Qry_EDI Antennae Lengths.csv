@@ -1,4 +1,4 @@
-"FLaSHLogNumber","Project","Date","Station","MinOfTowTime","SerialNumber","PreyLengthID","PreyCategory","PreyLengthSpecies","PreyLength","PreyAntennaLength","PreySex","PreyLengthComments"
+"FLaSHLogNumber","Project","Date","Station","MinOfTowTime","SerialNumber","PreyLengthID","PreyCategory","PreyLengthSpecies","PreyLength","PreyAntennaeLength","PreySex","PreyLengthComments"
 1168,"SKT",2/7/2013 0:00:00,"609",12/30/1899 13:15:00,"6378",8703,"Corophium type","A. spinicorne",3.90,2.50,"M","A2: 2.5 mm, M"
 1170,"SKT",2/7/2013 0:00:00,"609",12/30/1899 13:15:00,"6381",8714,"Corophium type","A. spinicorne",3.10,1.40,"M","A2: 1.4 mm, M"
 1174,"SKT",2/6/2013 0:00:00,"713",12/30/1899 11:42:00,"6309",8715,"Corophium type","A. stimpsoni",3.10,1.40,,"A2: 1.4 mm"
