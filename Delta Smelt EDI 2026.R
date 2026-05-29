@@ -474,6 +474,7 @@ lengths = rbind(dop_lengths, f_alllengths) %>%
                                        PreyLengthSpecies %in% c("Unid Corophium", "Unid Corophium type") ~ "Unid Corophium type",
                                        PreyLengthSpecies %in% c("Unid gammarus type", "Unid Gammarus") ~ "Unid Gammarus type",
                                        PreyLengthSpecies == "Gammarus spp." ~ "Gammarus spp", 
+                                       PreyLengthSpecies == "Unid larval shrimp" ~ "Other malacostraca"
                                        
                                        .default = PreyLengthSpecies)) %>% #change it so we remove the juvenile category and the others match
   mutate(PreySex = if_else(PreySex == "", NA, PreySex), 
