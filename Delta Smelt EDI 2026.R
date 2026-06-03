@@ -27,40 +27,52 @@ setwd("C:/Users/cburdi/OneDrive - California Department of Water Resources/Docum
 
 dop = read_xlsx("Data for R/DOP/DOP EDI Qry Diet by Number.xlsx")%>% #adding in the check names argument is needed for when reading a csv so it doesn't remove the spaces in the prey columns
   mutate(Time = as_hms(ymd_hms(Time, tz="America/Los_Angeles"))) %>% #convert time. need to have the mdy_hms in there because it wants it first as a date/time instead of a character
+  filter(GutContents !="" , 
+         DietStudy !=2) %>% #not including the error fish
+  rename(LogNumber = DOPLogNumber) %>% 
   mutate(Date = date(Date),
+         Error = as.character(DietStudy),#renaming the diet study column from the db to error
          DietStudy = "DOP", 
          Year = as.numeric(Year), 
-         Month = as.numeric(Month)) %>% 
+         Month = as.numeric(Month), 
+         Error = case_match(Error, "1" ~ "N",
+                            "2" ~ "Y", 
+                           .default = Error)) %>% #recoding the error column
   filter(Species %in% c( "DELSME","DELSME x WAKASA")) %>% #one is a genetic hybrid, but morph ID'd as DS so adding here
   filter(Year<2024) %>% 
-  filter(GutContents !="") %>% #not including the error fish
-  rename(LogNumber = DOPLogNumber) %>% 
-  select(-c(`<>`, Species)) #has this weird prey category. I don't know what it is but it has nothing in the column
+  filter(`PreyItemsID'd` == "Y") %>% 
+  select(-c(`<>`, Species, `PreyItemsID'd`)) #has this weird prey category. I don't know what it is but it has nothing in the column
 
 #need to add in presence-absence columns separately I guess
 
 dop_pa = read_xlsx("Data for R/DOP/DOP EDI Qry_Presence_Absence Categories to Post.xlsx") %>% 
   mutate(Time = as_hms(ymd_hms(Time, tz="America/Los_Angeles"))) %>% 
   # mutate(Date2 = mdy_hms(Date)) %>% #need to convert to date, but also has the time in there which is why use _hm
-  mutate(Date = date(Date),
-         DietStudy = "DOP", 
-         Year = as.numeric(Year), 
-         Month = as.numeric(Month)) %>% 
   rename(LogNumber = DOPLogNumber, 
          Debris = `Debris (sand/silt/mud)`,
          "Stomach tissue" = `Stomach/Gut Tissue`) %>% 
-  select(DietStudy, LogNumber, Year:SerialNumber, Time, Debris:`Unid plant material`)
+  mutate(Date = date(Date),
+         Error = as.character(DietStudy), 
+         DietStudy = "DOP", 
+         Year = as.numeric(Year), 
+         Month = as.numeric(Month)) %>% 
+  mutate(Error = case_match(Error, "1" ~ "N",
+                            "2" ~ "Y", 
+                            .default = Error)) %>% #recoding the error column
+  filter(Error != "Y" , 
+         `PreyItemsID'd` == "Y") %>% 
+  select(DietStudy, LogNumber, Year:SerialNumber, Time, Error, Debris:`Unid plant material`)
   
 #merge the two datasets
 
 dopall = dop %>% 
-  left_join(., dop_pa, by = c('DietStudy', 'LogNumber', 'Year', 'Month', 'Date', 'Station', 'SerialNumber', 'Time')) %>% 
+  left_join(., dop_pa, by = c('DietStudy', 'LogNumber', 'Year', 'Month', 'Date', 'Station', 'SerialNumber', 'Time', 'Error')) %>% 
   mutate(LogNumber = as.character(str_pad(LogNumber, width = 4, side = "left", pad = "0")) )%>% #add preceding zeros to the log numbers. also need to make it a character since flash has it that way
   mutate(UniqueID = paste(DietStudy, LogNumber, Project, Date, Station, SerialNumber, sep = " ")) %>%  #make a unique ID
   mutate(SurfacePPT = as.numeric(SurfacePPT), 
          BottomPPT = as.numeric(BottomPPT)) %>% 
   rename(CultureOrigin = CulturedOrigin) %>% 
-  select(UniqueID, DietStudy, LogNumber, Project:SerialNumber, CultureOrigin, Depth:DigestionRank, Debris: `Unid plant material`, `Acanthocyclops spp`: `Unid mysids` )
+  select(UniqueID, DietStudy, LogNumber, Project:SerialNumber, CultureOrigin, Depth:DigestionRank, Error, Debris: `Unid plant material`, `Acanthocyclops spp`: `Unid mysids` )
 
 #numbers look good, but just checking to make sure there's no duplicates
 
@@ -81,10 +93,10 @@ dsamples = read.csv("Data for R/DOP/DOP EDI Qry_Sample Check.csv") %>%
 
 #whats missing in the dop all file
 missdsamps = dsamples %>% 
-  filter(!LogNumber %in% dopall$LogNumber ) #11 missining but all here have blank gut contents, aka errors in the processing so all good
+  filter(!LogNumber %in% dopall$LogNumber ) #11 missing but all here have blank gut contents or diet study = 2, aka errors in the processing so all good
 
 #make csv
-write.csv(missdsamps, "Outputs/Error Checks/doperrorsamples.csv")
+#write.csv(missdsamps, "Outputs/Error Checks/doperrorsamples.csv")
 
 #######Flash Data--------
 
@@ -92,8 +104,13 @@ write.csv(missdsamps, "Outputs/Error Checks/doperrorsamples.csv")
 
 flash = read_xlsx("Data for R/FLaSH/FLaSH EDI Qry_Diet by Number.xlsx") %>% 
   rename(LogNumber = FLaSHLogNumber)%>% 
+  mutate(Error = as.character(DietStudy)) %>% 
   mutate(Time = as_hms(ymd_hms(Time, tz="America/Los_Angeles"))) %>% 
+  mutate(Error = case_match(Error, "1" ~ "N",
+                                   "2" ~ "Y", 
+                                   .default = Error)) %>% #recoding the error column
   filter(GutContents !="") %>% 
+  # filter(Error != "Y") %>% #filter out error fish but wait for update to do this
   mutate(Date= date(Date), 
          TotalPreyWeight = as.numeric(TotalPreyWeight), 
          GutFullness = as.numeric(GutFullness)) %>% 
@@ -103,12 +120,17 @@ flash = read_xlsx("Data for R/FLaSH/FLaSH EDI Qry_Diet by Number.xlsx") %>%
 #flash queries don't put out empties for some reason so need to add them
 
 flashempty = read_xlsx("Data for R/FLaSH/FLaSH EDI Qry_Empties with Enviro.xlsx") %>% 
+  rename(LogNumber = FLaSHLogNumber, 
+         Error = DietStudy)%>% 
+  mutate(Error = if_else(Error == "1", "N", "Y")) %>% #recoding the error column
+  filter(GutContents !="", 
+         # Error != "Y" , 
+         `PreyItemsID'd` == "Y") %>% 
   mutate(Time = as_hms(ymd_hms(Time, tz="America/Los_Angeles"))) %>% 
   mutate(SerialNumber = as.character(SerialNumber),
          TotalNumberOfPrey = as.numeric(TotalNumberOfPrey), 
          TotalPreyWeight = as.numeric(TotalPreyWeight), 
          GutFullness = as.numeric(GutFullness)) %>% 
-  rename(LogNumber = FLaSHLogNumber) %>% 
   mutate(Date = date(Date), 
          DietStudy = "FLaSH") %>% 
   rename(SurfacePPT = PPTSurf) %>% 
@@ -121,21 +143,27 @@ flash2 = bind_rows(flash, flashempty)
 #need to add pa categories
 
 flashpa = read_xlsx("Data for R/FLaSH/FLaSH EDI Qry_Presence_Absence Categories.xlsx") %>% 
-  select(-`Stomach empty`) %>% 
+  select(-`Stomach empty`) %>%
+  rename(LogNumber = FLaSHLogNumber, 
+         Debris = `Debris (sand/silt/mud)`,
+         "Stomach tissue" = `Stomach/Gut Tissue`, 
+         Error = DietStudy)%>% 
+  mutate(Time = as_hms(ymd_hms(Time, tz="America/Los_Angeles"))) %>% 
+  mutate(Error = if_else(Error == "1", "N", "Y")) %>% #recoding the error column
+  filter(GutContents !="" , 
+         # Error != "Y" , 
+         `PreyItemsID'd` == "Y") %>% 
   mutate(Time = as_hms(Time)) %>% 
   mutate(DietStudy = "FLaSH", 
          Year = as.numeric(Year), 
          Month = as.numeric(Month), 
          Station = as.character(Station)) %>% 
-  rename(LogNumber = FLaSHLogNumber, 
-         Debris = `Debris (sand/silt/mud)`,
-         "Stomach tissue" = `Stomach/Gut Tissue`) %>% 
-  select(DietStudy, LogNumber, Year:SerialNumber, Time, Debris:`Worm pieces`)
+  select(DietStudy, LogNumber, Year:SerialNumber, Time, Error, Debris:`Worm pieces`)
 
 #combine all the flash files 
 
 flash3= flash2 %>% 
-  left_join(., flashpa, by = c('DietStudy', 'LogNumber', 'Year', 'Month', 'Date', 'Station', 'SerialNumber', 'Time')) %>% 
+  left_join(., flashpa, by = c('DietStudy', 'LogNumber', 'Year', 'Month', 'Date', 'Station', 'SerialNumber', 'Time', 'Error')) %>% 
   mutate(LogNumber = str_pad(LogNumber, width = 4, side = "left", pad = "0")) #add preceding zeros to the log numbers
 
 
@@ -164,11 +192,10 @@ flash_ges= flash3 %>%
 #not all of these are duplicates
 
 gessumm = flash_ges %>% 
-  group_by(LogNumber, Project, Station, Date) %>% 
+  group_by(LogNumber, Project, Station, Date, Error) %>% 
   summarise(n = n())
 
-# 
-# write.csv(gessumm, "Outputs/Error Checks/gessum.csv", row.names = FALSE)
+#write.csv(gessumm, "Outputs/Error Checks/gessum_new.csv", row.names = FALSE)
 
 
 #looked up all the ges samples and connected them to time so I can filter them out
@@ -179,6 +206,7 @@ gescheck = read_xlsx("Data for R/GES Sample Details.xlsx") %>%
   mutate(Date = date(Date), 
          Station = as.character(Station), #change all these to match with the other file
          LogNumber = as.character(LogNumber)) %>% 
+  # filter(Error != "Y") %>% 
   select(LogNumber, Project:Date, Time)
 
 
@@ -205,6 +233,9 @@ flash4 = flash_noges %>%
 
 fsamples = read.csv("Data for R/FLaSH/FLaSH EDI Qry_Sample List.csv") %>% 
   mutate(LogNumber = str_pad(FLaSHLogNumber, width = 4, side = "left", pad = "0")) %>% 
+  rename(Error = DietStudy) %>% 
+  mutate(Error = if_else(Error == "1", "N", "Y")) %>% 
+  # filter(Error != "Y") %>% 
   select(-FLaSHLogNumber) 
 
 #whats missing in the flash all file
@@ -218,19 +249,22 @@ missfsamps = fsamples %>%
 misspa = read_xlsx("Data for R/FLaSH/FLaSH EDI Qry_Presence_Absence Categories.xlsx") %>% 
   select(-`Stomach empty`) %>% 
   mutate(Time = as_hms(Time)) %>% 
+  rename(Error = DietStudy, 
+         LogNumber = FLaSHLogNumber, 
+         Debris = `Debris (sand/silt/mud)`,
+         "Stomach tissue" = `Stomach/Gut Tissue`) %>% 
+  mutate(Error = if_else(Error == "1", "N", "Y")) %>% 
+  # filter(Error != "Y") %>% 
   mutate(DietStudy = "FLaSH", 
          Year = as.numeric(Year), 
          Month = as.numeric(Month), 
          Station = as.character(Station)) %>% 
-  rename(LogNumber = FLaSHLogNumber, 
-         Debris = `Debris (sand/silt/mud)`,
-         "Stomach tissue" = `Stomach/Gut Tissue`) %>% 
   mutate(LogNumber = str_pad(LogNumber, width = 4, side = "left", pad = "0")) %>% 
   mutate(GutFullness = 0) %>% #add a gutfullness column of 0
   filter(!LogNumber %in% flash4$LogNumber)  %>% 
   mutate(BottomTemperature = as.numeric(BottomTemperature), 
          BottomPPT = as.numeric(BottomPPT)) %>% 
-  select(-Species)
+  select(-c(Error, Species))
 
 
 missfsamps2 = flash4 %>% 
@@ -282,7 +316,7 @@ numball = bind_rows(flashall, dopall) %>%
          `Unid animal material`= if_else(is.na(`Unid animal material`), "N", "Y"), 
          `Unid plant material` = if_else(is.na(`Unid plant material`), "N", "Y"),
          `Worm pieces` = if_else(is.na(`Worm pieces`), "N", "Y")) %>% 
-  mutate(TotalNumberOfPrey = if_else(is.na(TotalNumberOfPrey), 0, TotalNumberOfPrey)) %>%  #make it so that fishes with presence/absence prey only are total 0 prey instead of na%>% 
+  mutate(TotalNumberOfPrey = if_else(is.na(TotalNumberOfPrey), 0, TotalNumberOfPrey))  #make it so that fishes with presence/absence prey only are total 0 prey instead of na%>% 
   filter(Year<2024)#Only up to 2023 has been fully QC'd
 
 #log numbers retain the preceeding zeros when opened as a text file or in R, excel removes them so if open there it looks like they've disappeared
@@ -290,6 +324,7 @@ numball = bind_rows(flashall, dopall) %>%
 
 numball_format = numball %>% 
   mutate(Depth = round(Depth, digits = 1), 
+         Secchi = round(Secchi, digits = 0), 
          SurfaceTemperature = round(SurfaceTemperature, digits = 1),
          SurfaceConductivity = round(SurfaceConductivity, digits = 0),
          SurfacePPT = round(SurfacePPT, digits = 2), 
